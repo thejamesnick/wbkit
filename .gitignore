@@ -3,3 +3,4 @@ target/
 ._*
 .DS_Store
 !tests/fixtures/*.wbx
+npm/out/

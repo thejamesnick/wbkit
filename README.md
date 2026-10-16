@@ -18,11 +18,15 @@ curl -fsSL https://raw.githubusercontent.com/thejamesnick/wbkit/main/install.sh 
 irm https://raw.githubusercontent.com/thejamesnick/wbkit/main/install.ps1 | iex
 ```
 
-**npm**: coming soon as `@webboxfun/wbkit`.
+**npm** (any system with Node 18+)
+
+```sh
+npm install -g @webboxfun/wbkit
+```
 
 Or download the file for your system from [Releases](https://github.com/thejamesnick/wbkit/releases/latest). Each release lists SHA-256 checksums in `SHA256SUMS`.
 
-> The programs aren't code-signed yet. The install scripts avoid the warnings. If you download by hand: on macOS, run `xattr -d com.apple.quarantine wbkit-darwin-*`; on Windows, choose **More info → Run anyway**.
+> The programs aren't code-signed yet. The install scripts and npm avoid the warnings. If you download by hand: on macOS, run `xattr -d com.apple.quarantine wbkit-darwin-*`; on Windows, choose **More info → Run anyway**.
 
 ## Quick start
 
