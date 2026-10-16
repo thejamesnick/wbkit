@@ -2,3 +2,4 @@ target/
 *.wbx
 ._*
 .DS_Store
+!tests/fixtures/*.wbx
