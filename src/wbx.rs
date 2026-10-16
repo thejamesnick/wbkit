@@ -721,7 +721,7 @@ mod tests {
     #[test]
     fn still_reads_a_package_made_by_the_first_packager() {
         // Made by the original wbkit-core (format 1.0.0, random file order, old checksum recipe).
-        let old = include_bytes!("../../api/src/wbx/fixtures/fixture.wbx");
+        let old = include_bytes!("../tests/fixtures/first-packager.wbx");
         let pkg = read_package(old, &Limits::default()).unwrap();
         assert_eq!(pkg.header.version, "1.0.0");
         assert_eq!(pkg.header.manifest.game_type, GameType::Bundled);
