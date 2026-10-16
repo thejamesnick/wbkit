@@ -160,6 +160,36 @@ pub struct Manifest {
     pub icon: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub screenshots: Option<Vec<String>>,
+    // ---- engagement (Building/Engagement.md); absent in older packages ----
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub achievements: Option<Vec<Achievement>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub leaderboards: Option<Vec<Leaderboard>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Achievement {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub points: u32,
+    #[serde(default)]
+    pub hidden: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Leaderboard {
+    pub id: String,
+    pub name: String,
+    /// "desc": higher is better; "asc": lower is better (times).
+    pub order: String,
+    /// "number", "time_ms" or "distance_m".
+    pub format: String,
+}
+
+fn valid_short_id(id: &str) -> bool {
+    let b = id.as_bytes();
+    !b.is_empty() && b.len() <= 40 && b.iter().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'-') && b[0] != b'-'
 }
 
 const PERMISSIONS: [&str; 5] = ["audio", "gamepad", "storage", "microphone", "fullscreen"];
@@ -239,6 +269,45 @@ impl Manifest {
         }
         if self.screenshots.as_ref().is_some_and(|s| s.len() > 10) {
             return bad("at most 10 screenshots");
+        }
+        if let Some(list) = &self.achievements {
+            if !self.webbox.features.achievements {
+                return bad("achievements are listed but webbox.features.achievements is false");
+            }
+            if list.len() > 100 {
+                return bad("at most 100 achievements");
+            }
+            let mut seen = std::collections::HashSet::new();
+            let mut total = 0u32;
+            for a in list {
+                if !valid_short_id(&a.id) || !seen.insert(a.id.as_str()) {
+                    return bad("achievement ids must be unique, 1 to 40 lowercase letters, numbers and dashes");
+                }
+                if a.name.trim().is_empty() || a.name.chars().count() > 40 || a.description.chars().count() > 120 || a.points > 100 {
+                    return bad("achievement name 1-40 characters, description up to 120, points 0-100");
+                }
+                total += a.points;
+            }
+            if total > 1000 {
+                return bad("achievements add up to more than 1000 points");
+            }
+        }
+        if let Some(list) = &self.leaderboards {
+            if !self.webbox.features.leaderboards {
+                return bad("leaderboards are listed but webbox.features.leaderboards is false");
+            }
+            if list.len() > 20 {
+                return bad("at most 20 leaderboards");
+            }
+            let mut seen = std::collections::HashSet::new();
+            for l in list {
+                if !valid_short_id(&l.id) || !seen.insert(l.id.as_str()) {
+                    return bad("leaderboard ids must be unique, 1 to 40 lowercase letters, numbers and dashes");
+                }
+                if l.name.trim().is_empty() || l.name.chars().count() > 40 || !["asc", "desc"].contains(&l.order.as_str()) || !["number", "time_ms", "distance_m"].contains(&l.format.as_str()) {
+                    return bad("leaderboard name 1-40 characters, order asc or desc, format number, time_ms or distance_m");
+                }
+            }
         }
         match self.game_type {
             GameType::Bundled => {
@@ -553,6 +622,8 @@ mod tests {
             url: None,
             icon: None,
             screenshots: None,
+            achievements: None,
+            leaderboards: None,
         }
     }
 
@@ -726,5 +797,24 @@ mod tests {
         assert_eq!(pkg.header.version, "1.0.0");
         assert_eq!(pkg.header.manifest.game_type, GameType::Bundled);
         assert!(pkg.files.contains_key("index.html") && pkg.files.contains_key("main.js"));
+    }
+
+    #[test]
+    fn engagement_definitions_are_checked_and_round_trip() {
+        let mut m = manifest();
+        m.achievements = Some(vec![Achievement { id: "first-win".into(), name: "First win".into(), description: "Win once.".into(), points: 10, hidden: false }]);
+        assert!(m.validate().is_err(), "needs the achievements feature");
+        m.webbox.features.achievements = true;
+        m.validate().unwrap();
+        m.leaderboards = Some(vec![Leaderboard { id: "high-score".into(), name: "High score".into(), order: "desc".into(), format: "number".into() }]);
+        m.webbox.features.leaderboards = true;
+        m.validate().unwrap();
+        let package = build_package(&m, &files(), 6, None, &Limits::default()).unwrap();
+        assert_eq!(read_package(&package, &Limits::default()).unwrap().header.manifest, m);
+        m.achievements.as_mut().unwrap()[0].points = 101;
+        assert!(m.validate().is_err());
+        m.achievements.as_mut().unwrap()[0].points = 10;
+        m.leaderboards.as_mut().unwrap()[0].order = "up".into();
+        assert!(m.validate().is_err());
     }
 }

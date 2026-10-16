@@ -5,7 +5,9 @@ use serde_json::{json, Map, Value};
 use std::{fs, path::Path};
 use wbkit_core::wbx::Manifest;
 
-const TOP: &[&str] = &["name", "id", "version", "description", "author", "entry_point", "type", "url", "category", "tags", "rating", "icon", "screenshots", "webbox", "technical"];
+const TOP: &[&str] = &["name", "id", "version", "description", "author", "entry_point", "type", "url", "category", "tags", "rating", "icon", "screenshots", "webbox", "technical", "achievements", "leaderboards"];
+const ACHIEVEMENT: &[&str] = &["id", "name", "description", "points", "hidden"];
+const LEADERBOARD: &[&str] = &["id", "name", "order", "format"];
 const WEBBOX: &[&str] = &["min_version", "permissions", "features"];
 const FEATURES: &[&str] = &["multiplayer", "achievements", "leaderboards", "cloud_save"];
 const TECHNICAL: &[&str] = &["renderer", "orientation", "fullscreen", "resolution"];
@@ -26,6 +28,12 @@ fn check_all(manifest: &Value) -> Result<(), String> {
     if let Some(webbox) = manifest.get("webbox") {
         check_keys(webbox, WEBBOX, "webbox.")?;
         if let Some(features) = webbox.get("features") { check_keys(features, FEATURES, "webbox.features.")?; }
+    }
+    for (field, known) in [("achievements", ACHIEVEMENT), ("leaderboards", LEADERBOARD)] {
+        if let Some(list) = manifest.get(field) {
+            let items = list.as_array().ok_or_else(|| format!("{} must be a list", field))?;
+            for (i, item) in items.iter().enumerate() { check_keys(item, known, &format!("{}[{}].", field, i))?; }
+        }
     }
     if let Some(technical) = manifest.get("technical") {
         check_keys(technical, TECHNICAL, "technical.")?;
