@@ -4,6 +4,7 @@
 mod files;
 mod manifest;
 mod report;
+mod warnings;
 
 use clap::{Parser, Subcommand};
 use std::{fs, path::PathBuf, process::ExitCode};
@@ -75,6 +76,11 @@ fn run(command: Command) -> Result<(), String> {
             let files = files::collect(&dir)?;
             if verbose { for (path, data) in &files { println!("  {:>10}  {}", report::size(data.len()), path); } }
             let created = if reproducible { None } else { Some(timestamp.unwrap_or_else(report::now_or_source_date)) };
+            if manifest.game_type == wbkit_core::wbx::GameType::Bundled {
+                for (page, url) in warnings::external_scripts(&files) {
+                    eprintln!("warning: {} loads a script from another website ({}). Bundled titles can only load their own files on WebBox, so it won't load for players. Copy it into your game folder and link it locally (for the SDK: <script src=\"webbox.js\">).", page, url);
+                }
+            }
             let bytes = build_package(&manifest, &files, compress, created.as_deref(), &UPLOAD_LIMITS).map_err(report::explain)?;
             read_package(&bytes, &UPLOAD_LIMITS).map_err(report::explain)?;
             let output = output.unwrap_or_else(|| PathBuf::from(format!("{}-{}.wbx", manifest.id, manifest.version)));

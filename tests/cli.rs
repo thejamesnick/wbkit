@@ -91,3 +91,13 @@ fn says_where_to_start_without_a_manifest() {
     let (ok, out) = wbkit(&["bundle", s(&dir)]);
     assert!(!ok && out.contains("wbkit init"), "{out}");
 }
+
+#[test]
+fn warns_about_scripts_from_other_websites_without_failing() {
+    let dir = game("external");
+    fs::write(dir.join("index.html"), "<title>Ext</title><script src=\"https://webbox.fun/sdk/v1/webbox.js\"></script>").unwrap();
+    wbkit(&["init", s(&dir)]);
+    let (ok, out) = wbkit(&["bundle", s(&dir), "-o", s(&dir.with_extension("wbx"))]);
+    assert!(ok, "{out}");
+    assert!(out.contains("warning: index.html loads a script from another website (https://webbox.fun/sdk/v1/webbox.js)"), "{out}");
+}
