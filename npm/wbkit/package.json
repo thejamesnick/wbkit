@@ -1,0 +1,13 @@
+{
+  "name": "@webboxfun/wbkit",
+  "version": "0.0.0",
+  "description": "Package web games and apps for WebBox (.wbx)",
+  "homepage": "https://publish.webbox.fun/docs/wbkit",
+  "repository": { "type": "git", "url": "git+https://github.com/thejamesnick/wbkit.git" },
+  "license": "MIT",
+  "bin": { "wbkit": "bin/wbkit.js" },
+  "files": ["bin", "README.md"],
+  "engines": { "node": ">=18" },
+  "keywords": ["webbox", "wbx", "games", "web-games", "packager"],
+  "optionalDependencies": {}
+}

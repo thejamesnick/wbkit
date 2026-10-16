@@ -1,0 +1,98 @@
+# Push a tag like v0.1.0 to build wbkit for every system, publish a GitHub release with checksums,
+# and (when the NPM_TOKEN secret is set) publish @webboxfun/wbkit to npm.
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-latest, target: aarch64-apple-darwin, asset: wbkit-darwin-arm64 }
+          - { os: macos-latest, target: x86_64-apple-darwin, asset: wbkit-darwin-x64 }
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-musl, asset: wbkit-linux-x64, musl: true }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl, asset: wbkit-linux-arm64, musl: true }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, asset: wbkit-win32-x64.exe }
+          - { os: windows-latest, target: aarch64-pc-windows-msvc, asset: wbkit-win32-arm64.exe }
+    runs-on: ${{ matrix.os }}
+    env:
+      # Self-contained Windows program: no Visual C++ runtime needed.
+      RUSTFLAGS: ${{ contains(matrix.target, 'windows') && '-C target-feature=+crt-static' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - if: matrix.musl
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: Check the program runs (native targets)
+        if: "!contains(matrix.target, 'aarch64-pc-windows') && !(matrix.target == 'x86_64-apple-darwin')"
+        shell: bash
+        run: target/${{ matrix.target }}/release/wbkit --version
+      - shell: bash
+        run: |
+          mkdir dist
+          src=target/${{ matrix.target }}/release/wbkit
+          [ -f "$src.exe" ] && src="$src.exe"
+          cp "$src" "dist/${{ matrix.asset }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum wbkit-* > SHA256SUMS && cat SHA256SUMS
+      - name: Make sure the tag matches Cargo.toml
+        run: |
+          crate="v$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)"
+          [ "$crate" = "$GITHUB_REF_NAME" ] || { echo "Tag $GITHUB_REF_NAME does not match Cargo.toml $crate"; exit 1; }
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --title "WBKit $GITHUB_REF_NAME" --generate-notes
+
+  npm:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - if: env.NODE_AUTH_TOKEN == ''
+        run: echo "::notice::NPM_TOKEN is not set, so npm publishing was skipped."
+      - if: env.NODE_AUTH_TOKEN != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - if: env.NODE_AUTH_TOKEN != ''
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - if: env.NODE_AUTH_TOKEN != ''
+        name: Publish platform packages, then the main package
+        run: |
+          node npm/build.mjs "${GITHUB_REF_NAME#v}" dist
+          for dir in npm/out/wbkit-*; do npm publish "$dir" --access public --provenance; done
+          npm publish npm/out/wbkit --access public --provenance
